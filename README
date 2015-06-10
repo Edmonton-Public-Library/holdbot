@@ -1,0 +1,19 @@
+=== Wed Jun 10 11:00:07 MDT 2015 ===
+
+Project Notes
+-------------
+
+Instructions for Running:
+./holdbot
+
+Product Description:
+Perl script written by Andrew Nisbet for Edmonton Public Library, distributable by the enclosed license.
+
+Repository Information:
+This product is under version control using Git.
+
+Dependencies:
+None
+
+Known Issues:
+None
