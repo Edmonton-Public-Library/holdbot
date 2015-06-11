@@ -58,6 +58,7 @@ Holdbot's job is to manage cancelling holds, and notify the owners of those hold
 
 == Conditions of hold cancelling ==
 1 ONORDER cancellation. This occurs when a item that is on order and accepting holds, is no longer available.
+  ** Deprecated **, use Notice for cancelled holds (holdcancelntc) report (in Circulation tab) instead.
 2 Last copy discard. When the last copy of a title is about to be discarded, all the holds should be cancelled.
 3 Orphaned volume level hold, can occur because of a bug in Symphony that doesn't allow volume level holds.
   Once an item is checked in at a branch (under floating rules), if there are no other items under that call
@@ -72,8 +73,8 @@ possibly moving holds to another title if possible. TBD
  -l: Process last copy holds. TBD.
  -m: Move holds from one title to another. Accepts input on STDIN in the form of 'TCN_SOURCE|TCN_DESTINATION|...'
      preserving the holds from title SOURCE in order. IN PROGRESS.
- -o: Process orphan holds. TBD.
- -v: Process volume level holds. TBD.
+ -o: ** deprecated **, cancel, cancelled ONORDER holds. Use Notice for cancelled holds (holdcancelntc) report (in Circulation tab).
+ -v: Process volume level holds AKA orphan holds.
  -x: This (help) message.
 
 example: $0 -x
@@ -209,8 +210,9 @@ sub init
 	}
 	if ( $opt{'o'} )
 	{
-		### Cancelled on order items have a home location of CANC_ORDER.
-		print STDERR "*** Warning: -o cancelled on-order holds cancel not implemented yet.\n";
+		### Cancelled on order items have ORD_CANCEL as an inactive reason. This should be done 
+		# using the Notice for cancelled holds (holdcancelntc) report.
+		print STDERR "*** Warning: -o cancelled on-order holds not implemented. See Notice for cancelled holds (holdcancelntc)\n";
 		usage();
 	}
 	if ( $opt{'v'} )
