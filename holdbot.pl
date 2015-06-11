@@ -1,9 +1,7 @@
 #!/usr/bin/perl -w
 ####################################################################################
 #
-# Perl source file for project holdbot 
-# Purpose:
-# Method:
+# Perl source file for project holdbot
 #
 # Manages the process of assessing, cancelling, and notifying customers about holds.
 #    Copyright (C) 2015  Andrew Nisbet
@@ -26,6 +24,7 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.1_01 - Adding -m, change dates of holds back to original. 
 #          0.1 - Script framework and documentation set up. 
 #          0.0 - Dev. 
 # Dependencies: pipe.pl.
@@ -44,7 +43,7 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $VERSION    = qq{0.1};
+my $VERSION    = qq{0.1_01};
 
 #
 # Message about this program and how to use it.
@@ -82,6 +81,32 @@ EOF
     exit;
 }
 
+# Search holds on item id for the given user id, then sets the hold date placed to the argument date.
+# param:  String user id.
+# param:  String item id.
+# param:  String holds date.
+# return: 1 if the user was found in the list of holds and 0 otherwise.
+sub set_hold_date( $$$ )
+{
+	my ( $userId, $itemId, $holdDate ) = @_;
+	return 0 if ( ! defined $holdDate or $holdDate eq '' );
+	chomp $holdDate;
+	# We will do a selection on holds on the new item and grep the user id to get the hold key then set the date with edithold.
+	my @holds = `echo "$userId" | seluser -iB 2>/dev/null | selhold -iU -j"ACTIVE" -oIK 2>/dev/null | selitem -iI -oBS 2>/dev/null | pipe.pl -t"c0"`;
+	chomp @holds;
+	return 0 if ( scalar @holds == 0 );
+	my @matches = grep $itemId, @holds;
+	printf STDERR "** Warning: customer '%s' has more than one hold on '%s'!\n", $userId, $itemId if ( scalar @matches > 1 );
+	foreach my $match ( @matches )
+	{
+		my ( $id, $holdKey ) = split '\|', $match;
+		return 0 if ( ! defined $holdKey or $holdKey eq '' );
+		printf "=setting hold key '%s's placed date to '%s'\n", $holdKey, $holdDate;
+		# `echo "$holdKey" | edithold -p"$holdDate"`;
+	}
+	return 1;
+}
+
 # Moves holds from one title to another.
 # param:  String of pipe delimited 'src_TCN|dst_TCN|'
 # return: <none>
@@ -99,8 +124,6 @@ sub move_holds( $ )
 	# echo LSC2740719 | selcatalog -iF -oC | selhold -iC -j"ACTIVE" -oKNUtp >
 	# holdKey   catkey sequence# userKey holdType date placed.
 	# 23038226|1419753|1|433644|T|20150325|
-	# 23470605|1419753|1|1050288|T|20150601|
-	# 23482547|1419753|1|1007114|T|20150603|
 	`echo "$src" | selcatalog -iF -oC | selhold -iC -j"ACTIVE" -oKNUtp >  tmp_holds.lst 2>/dev/null`;
 	`echo "$dst" | selcatalog -iF -oC | selhold -iC -j"ACTIVE" -oKNUtp >> tmp_holds.lst 2>/dev/null`;
 	# Order by date placed to interleave the holds from the other
@@ -120,18 +143,36 @@ sub move_holds( $ )
 	}
 	open ITEMS, "<item_ids_ordered.lst" or die "*** error reading 'item_ids_ordered.lst' $!\n";
 	open USERS, "<user_ids_ordered.lst" or die "*** error reading 'user_ids_ordered.lst' $!\n";
+	open ORDERED, "<tmp_holds_ordered.lst" or die "*** error reading 'tmp_holds_ordered.lst' $!\n";
 	# Stitch the two pieces together, items and users.
 	while (<ITEMS>)
 	{
 		my $item = $_; chomp $item;
 		my $user = <USERS>; chomp $user;
 		printf "cancelling hold on item %14s for %14s\n", $item, $user;
-		# `echo "$item" | cancelholds.pl -B"$user" -tU`;
+		`echo "$item" | cancelholds.pl -B"$user" -tU`;
 		printf " creating hold on item %14s for %14s\n", $new_item, $user;
-		# `echo "$new_item" | createholds.pl -B"$user" -tU`;
+		`echo "$new_item" | createholds.pl -B"$user" -tU`;
+		# Set the date hold placed back to original date.
+		my $original_hold_line = <ORDERED>; chomp $original_hold_line;
+		# We want '23482547|1419753|1|1007114|T|<20150603>|'
+		my $original_hold_date = `echo "$original_hold_line" | pipe.pl -o"c5"`;
+		# Ensure we have an actual date
+		if ( ! defined $original_hold_date or $original_hold_date eq '' or $original_hold_date !~ m/^\d{8}/ )
+		{
+			printf STDERR "*** error could find date in: '%s'\n", $original_hold_date;
+			exit 0;
+		}
+		if ( ! set_hold_date( $user, $new_item, $original_hold_date ) )
+		{
+			printf STDERR "*** error: placed date unset for customer: '%s'; item: '%s'\n", $user, $item;
+			exit 0;
+		}
+		exit 1; # testing just do one for now.
 	}
 	close ITEMS;
 	close USERS;
+	close ORDERED;
 }
 
 # Kicks off the setting of various switches.
@@ -165,6 +206,7 @@ sub init
 	}
 	if ( $opt{'v'} )
 	{
+		### Find and move / cancel orphan volume holds.
 		print STDERR "*** Warning: -v volume (orphaned) holds cancel not implemented yet.\n";
 		usage();
 	}
