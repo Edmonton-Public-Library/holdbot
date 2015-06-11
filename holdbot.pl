@@ -102,7 +102,7 @@ sub set_hold_date( $$$ )
 		my ( $id, $holdKey ) = split '\|', $match;
 		return 0 if ( ! defined $holdKey or $holdKey eq '' );
 		printf "=setting hold key '%s's placed date to '%s'\n", $holdKey, $holdDate;
-		# `echo "$holdKey" | edithold -p"$holdDate"`;
+		`echo "$holdKey" | edithold -p"$holdDate"`;
 	}
 	return 1;
 }
@@ -121,7 +121,6 @@ sub move_holds( $ )
 		usage();
 	}
 	# 1) collect all information about the current state of holds on these two titles.
-	# echo LSC2740719 | selcatalog -iF -oC | selhold -iC -j"ACTIVE" -oKNUtp >
 	# holdKey   catkey sequence# userKey holdType date placed.
 	# 23038226|1419753|1|433644|T|20150325|
 	`echo "$src" | selcatalog -iF -oC | selhold -iC -j"ACTIVE" -oKNUtp >  tmp_holds.lst 2>/dev/null`;
