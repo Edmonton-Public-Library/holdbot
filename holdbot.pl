@@ -24,6 +24,7 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.1_02 - Adding -m, check for hold type. 
 #          0.1_01 - Adding -m, change dates of holds back to original. 
 #          0.1 - Script framework and documentation set up. 
 #          0.0 - Dev. 
@@ -43,7 +44,7 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $VERSION    = qq{0.1_01};
+my $VERSION    = qq{0.1_02};
 
 #
 # Message about this program and how to use it.
@@ -52,7 +53,7 @@ sub usage()
 {
     print STDERR << "EOF";
 
-	usage: $0 [-x]
+	usage: [echo "TCN_1|TCN_2|"] | $0 [-dlmovx]
 Holdbot's job is to manage cancelling holds, and notify the owners of those holds, under special conditions.
 
 == Conditions of hold cancelling ==
@@ -101,7 +102,7 @@ sub set_hold_date( $$$ )
 	{
 		my ( $id, $holdKey ) = split '\|', $match;
 		return 0 if ( ! defined $holdKey or $holdKey eq '' );
-		printf "=setting hold key '%s's placed date to '%s'\n", $holdKey, $holdDate;
+		printf STDERR "=setting hold key '%s's placed date to '%s'\n", $holdKey, $holdDate;
 		`echo "$holdKey" | edithold -p"$holdDate"`;
 	}
 	return 1;
@@ -148,12 +149,21 @@ sub move_holds( $ )
 	{
 		my $item = $_; chomp $item;
 		my $user = <USERS>; chomp $user;
-		printf "cancelling hold on item %14s for %14s\n", $item, $user;
-		`echo "$item" | cancelholds.pl -B"$user" -tU`;
-		printf " creating hold on item %14s for %14s\n", $new_item, $user;
-		`echo "$new_item" | createholds.pl -B"$user" -tU`;
 		# Set the date hold placed back to original date.
 		my $original_hold_line = <ORDERED>; chomp $original_hold_line;
+		my $hold_type = `echo "$original_hold_line" | pipe.pl -o"c4"`;
+		chomp $hold_type;
+		# Don't process if this isn't a title level hold.
+		if ( ! defined $hold_type or $hold_type !~ m/T/ )
+		{
+			printf STDERR "* refusing to move non-title level hold for '%14s'\n", $user;
+			next;
+		}
+		printf STDERR "cancelling hold on item %14s for %14s\n", $item, $user;
+		`echo "$item" | cancelholds.pl -B"$user" -tU`;
+		printf STDERR " creating hold on item %14s for %14s\n", $new_item, $user;
+		`echo "$new_item" | createholds.pl -B"$user" -tU`;
+		# Now reset the original hold placed date from the original holds.
 		# We want '23482547|1419753|1|1007114|T|<20150603>|'
 		my $original_hold_date = `echo "$original_hold_line" | pipe.pl -o"c5"`;
 		# Ensure we have an actual date
