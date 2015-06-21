@@ -267,7 +267,7 @@ sub init
 				printf "%s\n", join( '|', @fields );
 			}
 		}
-		printf "%3d\n", $count;
+		printf STDERR "%3d\n", $count;
 		exit 1;
 	}
 	if ( $opt{'o'} )
