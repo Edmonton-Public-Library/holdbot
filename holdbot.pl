@@ -24,6 +24,8 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.1_04 - Add -l Last Copy hold cancellation. 
+#          0.1_03 - Update messaging in usage. 
 #          0.1_02 - Adding -m, check for hold type. 
 #          0.1_01 - Adding -m, change dates of holds back to original. 
 #          0.1 - Script framework and documentation set up. 
@@ -44,7 +46,40 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $VERSION    = qq{0.1_02};
+my $VERSION      = qq{0.1_04};
+
+# The report table produces this data. It gives an item key and status from discard audit
+# as bit flags.
+# Discard location (all)   = 0b00000001 1  = DISCARD
+# Last Copy                = 0b00000010 2  = last copy
+# Bills on copy            = 0b00000100 4  = item has bills
+# On order                 = 0b00001000 8  = item has orders pending. Check to make sure this flag is NOT set.
+# Serial Control (ignore)  = 0b00010000 16 = item is under serial control
+# Academic record (ignore) = 0b00100000 32 = item is accountable
+# Hold (Title)             = 0b01000000 64 = item has title level hold
+# Hold (Copy)              = 0b10000000 128= item has copy level hold
+my $DISCARD   = 0b00000001;
+my $LAST_COPY = 0b00000010;
+my $BILLS     = 0b00000100;
+my $ORDERS    = 0b00001000;
+my $SERIALS   = 0b00010000;
+my $ACCT      = 0b00100000;
+my $T_HOLDS   = 0b01000000;
+my $C_HOLDS   = 0b10000000;
+# 
+# The last copy complete list looks like this:
+# 999849|53|1|9|
+# 999849|61|1|13|
+# 999851|32|1|77|
+# 999859|23|1|9|
+# 999859|25|2|9|
+# 999875|22|1|9|
+# 999877|15|3|9|
+# 999948|1|1|19|
+# 999957|56|1|9|
+# 999999|20|1|9|
+#
+my $DISCARD_AUDIT = qq{'cat /s/sirsi/Unicorn/EPLwork/cronjobscripts/Discards/DISCARD_COMP.lst'};
 
 #
 # Message about this program and how to use it.
@@ -58,18 +93,17 @@ Holdbot's job is to manage cancelling holds, and notify the owners of those hold
 
 == Conditions of hold cancelling ==
 1 ONORDER cancellation. This occurs when a item that is on order and accepting holds, is no longer available.
-  ** Deprecated **, use Notice for cancelled holds (holdcancelntc) report (in Circulation tab) instead.
-2 Last copy discard. When the last copy of a title is about to be discarded, all the holds should be cancelled.
+  Identifies the cancelled orders, cancels the holds for customers, and sends notification.
+2 Last copy discard. When the last copy of a title is about to be discarded, all the holds should be cancelled
+  and the customers notified.
 3 Orphaned volume level hold, can occur because of a bug in Symphony that doesn't allow volume level holds.
   Once an item is checked in at a branch (under floating rules), if there are no other items under that call
   number, the sequence number doesn't get updated, and the hold table gets updated to contain the first item
   on the title. In some cases all customers have had their holds moved to volume 'n' of a title.
-4 Duplicate record load. TBD.
 
 Holdbot's role is to assess each of these situations as discrete tasks and cancel the holds on the title and
 possibly moving holds to another title if possible. TBD
 
- -d: Process duplicate record load holds. TBD.
  -l: Process last copy holds. TBD.
  -m: Move holds from one title to another. Accepts input on STDIN in the form of 'TCN_SOURCE|TCN_DESTINATION|...'
      preserving the holds from title SOURCE in order. IN PROGRESS.
@@ -77,7 +111,9 @@ possibly moving holds to another title if possible. TBD
  -v: Process volume level holds AKA orphan holds.
  -x: This (help) message.
 
-example: $0 -x
+example: 
+ $0 -x
+ echo "a1004031|LSC2740719" | $0 -m
 Version: $VERSION
 EOF
     exit;
@@ -185,28 +221,54 @@ sub move_holds( $ )
 	close ORDERED;
 }
 
+# Takes a flag encoded integer and tests if it encodes a last copy with a hold or not.
+# param:  flag field.
+# return: 1 if the param encoded a item with a hold and is a last copy and 0 otherwise. 
+sub isLastCopyWithHold( $ )
+{
+	my $bitField = shift;
+	### Last viable item with holds can be gathered through the discard report mechanism 
+	# (or looking for titles with 1 visible call num with one item).
+	# Read the entire list of discarded items. We are looking for those that match last copy,
+	# title hold and copy hold.
+	if (( $bitField & $LAST_COPY ) == $LAST_COPY ) 
+	{
+		if ((( $bitField & $T_HOLDS ) == $T_HOLDS ) or (( $bitField & $C_HOLDS ) == $C_HOLDS ) )
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
 # Kicks off the setting of various switches.
 # param:  
 # return: 
 sub init
 {
-	my $opt_string = 'dlmovx';
+	my $opt_string = 'lmovx';
 	getopts( "$opt_string", \%opt ) or usage();
 	usage() if ( $opt{'x'} );
-	if ( $opt{'d'} )
-	{
-		### Duplicate order loads can be spotted by looking for duplicate 020, or 024
-		# tags in titles, and are typically caused by bibload not matching on these tags
-		# due to an indexing failure, and thus creating new records.
-		print STDERR "*** Warning: -d duplicate title holds cancel not implemented yet.\n";
-		usage();
-	}
 	if ( $opt{'l'} )
 	{
-		### Last viable item with holds can be gathered through the discard report mechanism 
-		# (or looking for titles with 1 visible call num with one item).
-		print STDERR "*** Warning: -l last viable copy holds cancel not implemented yet.\n";
-		usage();
+		my $lines = `ssh sirsi\@eplapp.library.ualberta.ca '$DISCARD_AUDIT'`;
+		my @data = split '\n', $lines;
+		my $count = 0;
+		while ( @data )
+		{
+			my $line = shift @data;
+			chomp $line;
+			my @fields = split '\|', $line;
+			# Bit field is in the 4th element of the array.
+			if ( @fields and isLastCopyWithHold( $fields[3] ) )
+			{
+				# TODO: Do something clever.
+				$count++;
+				printf "%s\n", join( '|', @fields );
+			}
+		}
+		printf "%3d\n", $count;
+		exit 1;
 	}
 	if ( $opt{'o'} )
 	{
