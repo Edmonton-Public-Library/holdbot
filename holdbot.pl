@@ -24,13 +24,16 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.2.01 - Testing move holds. 
+#          0.2 - Re-factored out excessive processing in favour of cancelling and moving holds. 
+#          0.1_05 - Add -a to audit the DISCARD location before doing -l. 
 #          0.1_04 - Add -l Last Copy hold cancellation. 
 #          0.1_03 - Update messaging in usage. 
 #          0.1_02 - Adding -m, check for hold type. 
 #          0.1_01 - Adding -m, change dates of holds back to original. 
 #          0.1 - Script framework and documentation set up. 
 #          0.0 - Dev. 
-# Dependencies: pipe.pl.
+# Dependencies: pipe.pl - To clean and trim extra fields at various locations.
 #
 ###################################################################################
 
@@ -46,40 +49,7 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $VERSION      = qq{0.1_04};
-
-# The report table produces this data. It gives an item key and status from discard audit
-# as bit flags.
-# Discard location (all)   = 0b00000001 1  = DISCARD
-# Last Copy                = 0b00000010 2  = last copy
-# Bills on copy            = 0b00000100 4  = item has bills
-# On order                 = 0b00001000 8  = item has orders pending. Check to make sure this flag is NOT set.
-# Serial Control (ignore)  = 0b00010000 16 = item is under serial control
-# Academic record (ignore) = 0b00100000 32 = item is accountable
-# Hold (Title)             = 0b01000000 64 = item has title level hold
-# Hold (Copy)              = 0b10000000 128= item has copy level hold
-my $DISCARD   = 0b00000001;
-my $LAST_COPY = 0b00000010;
-my $BILLS     = 0b00000100;
-my $ORDERS    = 0b00001000;
-my $SERIALS   = 0b00010000;
-my $ACCT      = 0b00100000;
-my $T_HOLDS   = 0b01000000;
-my $C_HOLDS   = 0b10000000;
-# 
-# The last copy complete list looks like this:
-# 999849|53|1|9|
-# 999849|61|1|13|
-# 999851|32|1|77|
-# 999859|23|1|9|
-# 999859|25|2|9|
-# 999875|22|1|9|
-# 999877|15|3|9|
-# 999948|1|1|19|
-# 999957|56|1|9|
-# 999999|20|1|9|
-#
-my $DISCARD_AUDIT = qq{'cat /s/sirsi/Unicorn/EPLwork/cronjobscripts/Discards/DISCARD_COMP.lst'};
+my $VERSION      = qq{0.2.01};
 
 #
 # Message about this program and how to use it.
@@ -88,32 +58,28 @@ sub usage()
 {
     print STDERR << "EOF";
 
-	usage: [echo "TCN_1|TCN_2|"] | $0 [-dlmovx]
-Holdbot's job is to manage cancelling holds, and notify the owners of those holds, under special conditions.
+	usage:  cat catkeys.file | $0 [-cmUx]
+Holdbot's job is to manage holds in a way that will produce output suitable for consumption of other scripts.
 
-== Conditions of hold cancelling ==
-1 ONORDER cancellation. This occurs when a item that is on order and accepting holds, is no longer available.
-  Identifies the cancelled orders, cancels the holds for customers, and sends notification.
-2 Last copy discard. When the last copy of a title is about to be discarded, all the holds should be cancelled
-  and the customers notified.
-3 Orphaned volume level hold, can occur because of a bug in Symphony that doesn't allow volume level holds.
-  Once an item is checked in at a branch (under floating rules), if there are no other items under that call
-  number, the sequence number doesn't get updated, and the hold table gets updated to contain the first item
-  on the title. In some cases all customers have had their holds moved to volume 'n' of a title.
+Holdbot can move holds from one title to another if given appropriate input of pipe separated catalogue keys on STDIN,
+one pair per line in the format 'C_KEY_SRC|C_KEY_DEST|'.
 
-Holdbot's role is to assess each of these situations as discrete tasks and cancel the holds on the title and
-possibly moving holds to another title if possible. TBD
+The script can also cancel all holds on a title. The titles are identified by the catalog key supplied, one
+per line, on STDIN.
 
- -l: Process last copy holds. TBD.
- -m: Move holds from one title to another. Accepts input on STDIN in the form of 'TCN_SOURCE|TCN_DESTINATION|...'
-     preserving the holds from title SOURCE in order. IN PROGRESS.
- -o: ** deprecated **, cancel, cancelled ONORDER holds. Use Notice for cancelled holds (holdcancelntc) report (in Circulation tab).
- -v: Process volume level holds AKA orphan holds.
+In all cases the keys are tested before the operations take place.
+
+ -a: Perform audit of DISCARD location before -l flag function is run.
+ -c: Cancel tile and copy holds on title based on catalogue keys from STDIN. When this switch is used, and the
+     holds are cancelled, the HOLD-er's user ID and title are output to STDOUT in pipe-delimited fashion.
+ -m: Move holds from one title to another. Accepts input on STDIN in the form of 'TCN_SOURCE|TCN_DESTINATION|'
+     preserving the holds from title SOURCE in order.
  -x: This (help) message.
 
 example: 
  $0 -x
  echo "a1004031|LSC2740719" | $0 -m
+ cat catalog.keys | $0 -c
 Version: $VERSION
 EOF
     exit;
@@ -127,6 +93,7 @@ EOF
 sub set_hold_date( $$$ )
 {
 	my ( $userId, $itemId, $holdDate ) = @_;
+	printf STDERR "***'%s' heres the hold date!\n", $holdDate;
 	return 0 if ( ! defined $holdDate or $holdDate eq '' );
 	chomp $holdDate;
 	# We will do a selection on holds on the new item and grep the user id to get the hold key then set the date with edithold.
@@ -178,6 +145,7 @@ sub move_holds( $ )
 		print STDERR "*** error: couldn't find an item ID associated with flex key '$dst'\n";
 		exit 0;
 	}
+	return if ( ! $opt{'U'} );
 	open ITEMS, "<item_ids_ordered.lst" or die "*** error reading 'item_ids_ordered.lst' $!\n";
 	open USERS, "<user_ids_ordered.lst" or die "*** error reading 'user_ids_ordered.lst' $!\n";
 	open ORDERED, "<tmp_holds_ordered.lst" or die "*** error reading 'tmp_holds_ordered.lst' $!\n";
@@ -203,6 +171,7 @@ sub move_holds( $ )
 		# Now reset the original hold placed date from the original holds.
 		# We want '23482547|1419753|1|1007114|T|<20150603>|'
 		my $original_hold_date = `echo "$original_hold_line" | pipe.pl -o"c5"`;
+		chomp $original_hold_date;
 		# Ensure we have an actual date
 		if ( ! defined $original_hold_date or $original_hold_date eq '' or $original_hold_date !~ m/^\d{8}/ )
 		{
@@ -211,31 +180,93 @@ sub move_holds( $ )
 		}
 		if ( ! set_hold_date( $user, $new_item, $original_hold_date ) )
 		{
+			printf STDERR "*** error: '%s'\n", $original_hold_line;
 			printf STDERR "*** error: placed date unset for customer: '%s'; item: '%s'\n", $user, $item;
 			exit 0;
 		}
-		exit 1; # testing just do one for now.
 	}
 	close ITEMS;
 	close USERS;
 	close ORDERED;
 }
 
-# Takes a flag encoded integer and tests if it encodes a last copy with a hold or not.
-# param:  flag field.
-# return: 1 if the param encoded a item with a hold and is a last copy and 0 otherwise. 
-sub isLastCopyWithHold( $ )
+# Cancel holds on the title.
+# param:  Catalogue key.
+# return: Count of the number of holds cancelled on a title.
+sub cancel_holds_on_title( $ )
 {
-	my $bitField = shift;
-	### Last viable item with holds can be gathered through the discard report mechanism 
-	# (or looking for titles with 1 visible call num with one item).
-	# Read the entire list of discarded items. We are looking for those that match last copy,
-	# title hold and copy hold.
-	if (( $bitField & $LAST_COPY ) == $LAST_COPY ) 
+	my $catKey  = shift;
+	# Output the user id so we can email, and the item id for email content.
+	my $title = `echo "$catKey" | selcatalog -iC -ot 2>/dev/null`; # V also
+	chomp $title;
+	# This should look like "[user bar code]|[title]|", and be written in an output for mailerbot.
+
+	my $results = `echo "$catKey" | selhold -iC -j"ACTIVE" -oIUt 2>/dev/null | selitem -iI -oSB 2>/dev/null | seluser -iU -oBS 2>/dev/null'`;
+	# creates: '21221012345678|T|31221087033671  |' for the one hold on a many item-ed title, so many lines.
+	my @lines = split '\n', $results;
+	my $count = scalar @lines;
+	if ( ! $count )
 	{
-		if ((( $bitField & $T_HOLDS ) == $T_HOLDS ) or (( $bitField & $C_HOLDS ) == $C_HOLDS ) )
+		printf STDERR "== no holds on title %s ($catKey)\n", $title;
+		return 0;
+	}
+	printf STDERR "== cancelling holds on title %s ($catKey)\n", $title;
+	while ( @lines )
+	{
+		my $line = shift @lines;
+		chomp $line;
+		my ( $userId, $holdType, $itemId ) = split '\|', $line;
+		next if ( ! defined $userId or ! defined $holdType or ! defined $itemId );
+		next if ( $userId eq '' or $holdType eq ''  or $itemId  eq '' );
+		# Output the user id so we can email, and the item id for email content.
+		my $title  = `echo "$catKey" | selcatalog -iC -ot 2>/dev/null`;
+		# This should look like "[user bar code]|[title]|", and be written in an output for mailerbot.
+		printf "%s|%s", $userId, $title;
+		if ( $opt{'U'} )
 		{
-			return 1;
+			printf STDERR "   user ID: %14s, item: %14s of type '%s'\n", $userId, $itemId, $holdType;
+			if ( $holdType eq 'C' )
+			{
+				`echo "$itemId" | cancelholds.pl -B"$userId" -U`;
+			}
+			else # Title level hold $holdType eq 'T'
+			{
+				`echo "$itemId" | cancelholds.pl -B"$userId" -Ut`;
+			}
+		}
+	}
+	return $count;
+}
+
+# Tests if argument is a catalogue key on the ILS.
+# param:  catalogue key.
+# return: 1 if the argument tested to be a valid catalogue key on the ILS and false otherwise.
+sub is_cat_key( $ )
+{
+	my $testKey = shift;
+	my $result  = `echo "$testKey" | selcatalog -iC 2>/dev/null`;
+	return 1 if ( defined $result and $result ne '' );
+	return 0;
+}
+
+# Takes a line as argument splits the source and destination and tests each for cat-key'ed-ness.
+# param:  string like "789657|203334|"
+sub test_TCN_pairs( $ )
+{
+	my $testLine = shift;
+	my @tcns = split '\|', $testLine;
+	if ( defined $tcns[0] and $tcns[0] ne '' )
+	{
+		if ( defined $tcns[1] and $tcns[1] ne '' )
+		{
+			my $testKey = $tcns[0];
+			my $result = `echo "$testKey" | selcatalog -iF 2>/dev/null`;
+			if ( defined $result and $result ne '' )
+			{
+				$testKey = $tcns[1];
+				$result = `echo "$testKey" | selcatalog -iF 2>/dev/null`;
+				return 1 if ( defined $result and $result ne '' );
+			}
 		}
 	}
 	return 0;
@@ -246,49 +277,37 @@ sub isLastCopyWithHold( $ )
 # return: 
 sub init
 {
-	my $opt_string = 'lmovx';
+	my $opt_string = 'cmUx';
 	getopts( "$opt_string", \%opt ) or usage();
 	usage() if ( $opt{'x'} );
-	if ( $opt{'l'} )
-	{
-		my $lines = `ssh sirsi\@eplapp.library.ualberta.ca '$DISCARD_AUDIT'`;
-		my @data = split '\n', $lines;
-		my $count = 0;
-		while ( @data )
-		{
-			my $line = shift @data;
-			chomp $line;
-			my @fields = split '\|', $line;
-			# Bit field is in the 4th element of the array.
-			if ( @fields and isLastCopyWithHold( $fields[3] ) )
-			{
-				# TODO: Do something clever.
-				$count++;
-				printf "%s\n", join( '|', @fields );
-			}
-		}
-		printf STDERR "%3d\n", $count;
-		exit 1;
-	}
-	if ( $opt{'o'} )
-	{
-		### Cancelled on order items have ORD_CANCEL as an inactive reason. This should be done 
-		# using the Notice for cancelled holds (holdcancelntc) report.
-		print STDERR "*** Warning: -o cancelled on-order holds not implemented. See Notice for cancelled holds (holdcancelntc)\n";
-		usage();
-	}
-	if ( $opt{'v'} )
-	{
-		### Find and move / cancel orphan volume holds.
-		print STDERR "*** Warning: -v volume (orphaned) holds cancel not implemented yet.\n";
-		usage();
-	}
 }
 
 init();
 # Can take input from STDIN, but each function handles it in a different way.
 while (<>)
 {
-	move_holds( $_ ) if ( $opt{'m'} );
+	# Move holds.
+	if ( $opt{'m'} )
+	{
+		my $tcn_pair = $_;
+		chomp $tcn_pair;
+		if ( ! test_TCN_pairs( $tcn_pair ) )
+		{
+			printf STDERR "%14s one or both of the TCNs are not valid.\n", $tcn_pair;
+			next;
+		}
+		move_holds( $tcn_pair );
+	}
+	if ( $opt{'c'} )
+	{
+		my $key = $_;
+		chomp $key;
+		if ( ! is_cat_key( $key ) )
+		{
+			printf STDERR "%14s is a not a valid catalogue key.\n", $key;
+			next;
+		}
+		cancel_holds_on_title( $key );
+	}
 }
 # EOF
