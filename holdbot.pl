@@ -226,7 +226,7 @@ sub cancel_holds_on_title( $ )
 		if ( $opt{'s'} )
 		{
 			chomp $title;
-			my $search = `echo "$title" | pipe.pl -m'c0:@@@@@@@@@@@@@@@@@@@@@@@@@@@@-' | pipe.pl -e'c0' | pipe.pl -m'c0:http://epl.bibliocommons.com/search?t=smart&q=@'`;
+			my $search = qq{http://epl.bibliocommons.com/search?t=smart&q=}.`echo "$title" | pipe.pl -e'c0'`;
 			# output as "[user bar code]|[title]|[search url]", and be written in an output for mailerbot.
 			printf "%s|%s|%s", $userId, $title, $search;
 		}
