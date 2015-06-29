@@ -24,6 +24,7 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.3 - Add search-able URL to title. 
 #          0.2.01 - Testing move holds. 
 #          0.2 - Re-factored out excessive processing in favour of cancelling and moving holds. 
 #          0.1_05 - Add -a to audit the DISCARD location before doing -l. 
@@ -49,7 +50,7 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $VERSION      = qq{0.2.01};
+my $VERSION      = qq{0.3};
 
 #
 # Message about this program and how to use it.
@@ -58,7 +59,7 @@ sub usage()
 {
     print STDERR << "EOF";
 
-	usage:  cat catkeys.file | $0 [-cmUx]
+	usage:  cat catkeys.file | $0 [-cmsUx]
 Holdbot's job is to manage holds in a way that will produce output suitable for consumption of other scripts.
 
 Holdbot can move holds from one title to another if given appropriate input of pipe separated catalogue keys on STDIN,
@@ -74,6 +75,8 @@ In all cases the keys are tested before the operations take place.
      holds are cancelled, the HOLD-er's user ID and title are output to STDOUT in pipe-delimited fashion.
  -m: Move holds from one title to another. Accepts input on STDIN in the form of 'TCN_SOURCE|TCN_DESTINATION|'
      preserving the holds from title SOURCE in order.
+ -s: Add EPL search-able URL for title.
+ -U: Actually do the work, don't just go through the motions. Without -U the script just prints the user ids and titles.
  -x: This (help) message.
 
 example: 
@@ -196,10 +199,10 @@ sub move_holds( $ )
 sub cancel_holds_on_title( $ )
 {
 	my $catKey  = shift;
-	# Output the user id so we can email, and the item id for email content.
+	# Output the title for the customer for email content.
 	my $title = `echo "$catKey" | selcatalog -iC -ot 2>/dev/null`; # V also
 	chomp $title;
-	# This should look like "[user bar code]|[title]|", and be written in an output for mailerbot.
+	# This should look like "[user bar code]|[title]|[search URL]", and be written in an output for mailerbot.
 
 	my $results = `echo "$catKey" | selhold -iC -j"ACTIVE" -oIUt 2>/dev/null | selitem -iI -oSB 2>/dev/null | seluser -iU -oBS 2>/dev/null'`;
 	# creates: '21221012345678|T|31221087033671  |' for the one hold on a many item-ed title, so many lines.
@@ -220,8 +223,18 @@ sub cancel_holds_on_title( $ )
 		next if ( $userId eq '' or $holdType eq ''  or $itemId  eq '' );
 		# Output the user id so we can email, and the item id for email content.
 		my $title  = `echo "$catKey" | selcatalog -iC -ot 2>/dev/null`;
-		# This should look like "[user bar code]|[title]|", and be written in an output for mailerbot.
-		printf "%s|%s", $userId, $title;
+		if ( $opt{'s'} )
+		{
+			chomp $title;
+			my $search = `echo "$title" | pipe.pl -m'c0:@@@@@@@@@@@@@@@@@@@@@@@@@@@@-' | pipe.pl -e'c0' | pipe.pl -m'c0:http://epl.bibliocommons.com/search?t=smart&q=@'`;
+			# output as "[user bar code]|[title]|[search url]", and be written in an output for mailerbot.
+			printf "%s|%s|%s", $userId, $title, $search;
+		}
+		else
+		{
+			# This should look like "[user bar code]|[title]|", and be written in an output for mailerbot.
+			printf "%s|%s", $userId, $title;
+		}
 		if ( $opt{'U'} )
 		{
 			printf STDERR "   user ID: %14s, item: %14s of type '%s'\n", $userId, $itemId, $holdType;
@@ -277,7 +290,7 @@ sub test_TCN_pairs( $ )
 # return: 
 sub init
 {
-	my $opt_string = 'cmUx';
+	my $opt_string = 'cmUsx';
 	getopts( "$opt_string", \%opt ) or usage();
 	usage() if ( $opt{'x'} );
 }
