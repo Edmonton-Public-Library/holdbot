@@ -24,6 +24,7 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.3.01 - Added -aN to not move holds that are available. 
 #          0.3 - Add search-able URL to title. 
 #          0.2.01 - Testing move holds. 
 #          0.2 - Re-factored out excessive processing in favour of cancelling and moving holds. 
@@ -50,7 +51,7 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $VERSION      = qq{0.3};
+my $VERSION      = qq{0.3.01};
 
 #
 # Message about this program and how to use it.
@@ -131,8 +132,8 @@ sub move_holds( $ )
 	# 1) collect all information about the current state of holds on these two titles.
 	# holdKey   catkey sequence# userKey holdType date placed.
 	# 23038226|1419753|1|433644|T|20150325|
-	`echo "$src" | selcatalog -iF -oC | selhold -iC -j"ACTIVE" -oKNUtp >  tmp_holds.lst 2>/dev/null`;
-	`echo "$dst" | selcatalog -iF -oC | selhold -iC -j"ACTIVE" -oKNUtp >> tmp_holds.lst 2>/dev/null`;
+	`echo "$src" | selcatalog -iF -oC | selhold -iC -j"ACTIVE" -a'N' -oKNUtp >  tmp_holds.lst 2>/dev/null`;
+	`echo "$dst" | selcatalog -iF -oC | selhold -iC -j"ACTIVE" -a'N' -oKNUtp >> tmp_holds.lst 2>/dev/null`;
 	# Order by date placed to interleave the holds from the other
 	`cat tmp_holds.lst | pipe.pl -s"c5" -U >tmp_holds_ordered.lst`;
 	# Cancel all holds on src, and create on dst, in order one-at-a-time.
