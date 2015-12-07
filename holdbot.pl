@@ -24,6 +24,7 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.3.02 - Fixed bug that failed to lower case titles before output. 
 #          0.3.01 - Added -aN to not move holds that are available. 
 #          0.3 - Add search-able URL to title. 
 #          0.2.01 - Testing move holds. 
@@ -51,7 +52,7 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $VERSION      = qq{0.3.01};
+my $VERSION      = qq{0.3.02};
 
 #
 # Message about this program and how to use it.
@@ -227,7 +228,7 @@ sub cancel_holds_on_title( $ )
 		if ( $opt{'s'} )
 		{
 			chomp $title;
-			my $search = qq{http://epl.bibliocommons.com/search?t=smart&q=}.`echo "$title" | pipe.pl -e'c0'`;
+			my $search = qq{http://epl.bibliocommons.com/search?t=smart&q=}.`echo "$title" | pipe.pl -e'c0:lc'`;
 			# output as "[user bar code]|[title]|[search url]", and be written in an output for mailerbot.
 			printf "%s|%s|%s", $userId, $title, $search;
 		}
