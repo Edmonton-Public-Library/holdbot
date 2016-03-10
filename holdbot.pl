@@ -24,6 +24,7 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.4.01 - Check for availability of yesterday. 
 #          0.4.00 - Add fix to change INACTIVE holds to have available flag 'Y' to 'N'. 
 #          0.3.02 - Fixed bug that failed to lower case titles before output. 
 #          0.3.01 - Added -aN to not move holds that are available. 
@@ -59,6 +60,8 @@ my $TIME               = `date +%H%M%S`;
 chomp $TIME;
 my $DATE               = `date +%m/%d/%Y`;
 chomp $DATE;
+my $TODAY              = `date +%Y%m%d`;
+chomp $TODAY;
 my @CLEAN_UP_FILE_LIST = (); # List of file names that will be deleted at the end of the script if ! '-t'.
 my $BINCUSTOM          = `getpathname bincustom`;
 chomp $BINCUSTOM;
@@ -350,7 +353,7 @@ sub test_TCN_pairs( $ )
 # return: count of records fixed.
 sub fix_inactive_available_holds()
 {
-	my $results = `selhold -aY -jINACTIVE 2>/dev/null`;
+	my $results = `selhold -aY -jINACTIVE -6"<$TODAY" 2>/dev/null`;
 	my $inactiveAvailableHoldKeys = create_tmp_file( "holdbot", $results );
 	if ( $opt{'U'} )
 	{

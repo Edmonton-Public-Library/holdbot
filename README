@@ -28,7 +28,7 @@ Repository Information:
 This product is under version control using Git.
 
 Dependencies:
-None
+[Pipe.pl](https://github.com/anisbet/pipe)
 
 Known Issues:
-None
+Moving holds is experimental.
