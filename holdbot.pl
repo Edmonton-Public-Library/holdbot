@@ -134,6 +134,7 @@ In all cases the keys are tested before the operations take place.
  -m: Move holds from one title to another. Accepts input on STDIN in the form of 'TCN_SOURCE|TCN_DESTINATION|'
      preserving the holds from title SOURCE in order.
  -s: Add EPL search-able URL for title.
+ -t: Preserve temporary files in $TEMP_DIR.
  -U: Actually do the work, don't just go through the motions. Without -U the script just prints the user ids and titles.
  -x: This (help) message.
 
@@ -141,7 +142,7 @@ example:
  $0 -x
  echo "a1004031|LSC2740719" | $0 -m
  cat catalog.keys | $0 -c
- $0 -A
+ $0 -AUt
 Version: $VERSION
 EOF
     exit;
@@ -350,12 +351,12 @@ sub test_TCN_pairs( $ )
 sub fix_inactive_available_holds()
 {
 	my $results = `selhold -aY -jINACTIVE 2>/dev/null`;
-	my $inactiveAvailableHoldKeys = create_tmp_file( "holdbot_", $results );
+	my $inactiveAvailableHoldKeys = create_tmp_file( "holdbot", $results );
 	if ( $opt{'U'} )
 	{
 		`cat "$inactiveAvailableHoldKeys" | edithold -a'N'`;
 	}
-	$results = `cat "" | wc -l | "$PIPE" -tc0`;
+	$results = `cat "$inactiveAvailableHoldKeys" | wc -l | "$PIPE" -tc0`;
 	return $results;
 }
 
@@ -364,12 +365,13 @@ sub fix_inactive_available_holds()
 # return: 
 sub init
 {
-	my $opt_string = 'AcmUsx';
+	my $opt_string = 'AcmtUsx';
 	getopts( "$opt_string", \%opt ) or usage();
 	usage() if ( $opt{'x'} );
 	if ( $opt{'A'} )
 	{
 		printf STDERR "Fixed: %d INACTIVE but available holds.\n", fix_inactive_available_holds();
+		clean_up() if ( ! $opt{'t'} );
 		exit 0;
 	}
 }
