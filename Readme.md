@@ -1,16 +1,21 @@
-=== Wed Jun 10 11:00:07 MDT 2015 ===
+
+
+
+Instructions for Running
+------------------------
+```
+[cat catkeys.file | $0 [-cmsUx] | $0 -A]
+```
 
 Project Notes
 -------------
-
-Instructions for Running:
-./holdbot
 
 Product Description:
 Perl script written by Andrew Nisbet for Edmonton Public Library, and is distributable by the enclosed license.
 Holdbot's job is to manage cancelling holds, and notify the owners of those holds, under special conditions.
 
-== Conditions of hold cancelling ==
+Conditions of hold cancelling
+-----------------------------
 * ONORDER cancellation. This occurs when a item that is on order and accepting holds, is no longer available.
 * Last copy discard. When the last copy of a title is about to be discarded, all the holds should be cancelled.
 * Orphaned volume level hold, can occur because of a bug in Symphony that doesn't allow volume level holds.
@@ -24,11 +29,14 @@ Holdbot's role is to assess each of these situations as discrete tasks and cance
 possibly moving holds to another title if possible.(?)
 
 
-Repository Information:
+Repository Information
+----------------------
 This product is under version control using Git.
 
-Dependencies:
+Dependencies
+------------
 [Pipe.pl](https://github.com/anisbet/pipe)
 
-Known Issues:
+Known Issues
+------------
 Moving holds is experimental.
