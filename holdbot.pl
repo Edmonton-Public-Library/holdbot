@@ -24,6 +24,7 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.4.00 - Add fix to change INACTIVE holds to have available flag 'Y' to 'N'. 
 #          0.3.02 - Fixed bug that failed to lower case titles before output. 
 #          0.3.01 - Added -aN to not move holds that are available. 
 #          0.3 - Add search-able URL to title. 
@@ -52,7 +53,62 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $VERSION      = qq{0.3.02};
+my $TEMP_DIR           = `getpathname tmp`;
+chomp $TEMP_DIR;
+my $TIME               = `date +%H%M%S`;
+chomp $TIME;
+my $DATE               = `date +%m/%d/%Y`;
+chomp $DATE;
+my @CLEAN_UP_FILE_LIST = (); # List of file names that will be deleted at the end of the script if ! '-t'.
+my $BINCUSTOM          = `getpathname bincustom`;
+chomp $BINCUSTOM;
+my $PIPE               = "$BINCUSTOM/pipe.pl";
+my $VERSION            = qq{0.4.00};
+
+# Removes all the temp files created during running of the script.
+# param:  List of all the file names to clean up.
+# return: <none>
+sub clean_up
+{
+	foreach my $file ( @CLEAN_UP_FILE_LIST )
+	{
+		if ( $opt{'t'} )
+		{
+			printf STDERR "preserving file '%s' for review.\n", $file;
+		}
+		else
+		{
+			if ( -e $file )
+			{
+				unlink $file;
+			}
+			else
+			{
+				printf STDERR "** Warning: file '%s' not found.\n", $file;
+			}
+		}
+	}
+}
+
+# Writes data to a temp file and returns the name of the file with path.
+# param:  unique name of temp file, like master_list, or 'hold_keys'.
+# param:  data to write to file.
+# return: name of the file that contains the list.
+sub create_tmp_file( $$ )
+{
+	my $name    = shift;
+	my $results = shift;
+	my $sequence= sprintf "%02d", scalar @CLEAN_UP_FILE_LIST;
+	my $master_file = "$TEMP_DIR/$name.$sequence.$TIME";
+	# Return just the file name if there are no results to report.
+	return $master_file if ( ! $results );
+	open FH, ">$master_file" or die "*** error opening '$master_file', $!\n";
+	print FH $results;
+	close FH;
+	# Add it to the list of files to clean if required at the end.
+	push @CLEAN_UP_FILE_LIST, $master_file;
+	return $master_file;
+}
 
 #
 # Message about this program and how to use it.
@@ -61,7 +117,7 @@ sub usage()
 {
     print STDERR << "EOF";
 
-	usage:  cat catkeys.file | $0 [-cmsUx]
+	usage:  [cat catkeys.file | $0 [-cmsUx] | $0 -A]
 Holdbot's job is to manage holds in a way that will produce output suitable for consumption of other scripts.
 
 Holdbot can move holds from one title to another if given appropriate input of pipe separated catalogue keys on STDIN,
@@ -72,7 +128,7 @@ per line, on STDIN.
 
 In all cases the keys are tested before the operations take place.
 
- -a: Perform audit of DISCARD location before -l flag function is run.
+ -A: Fix availability flag for INACTIVE holds. Can be run without fixing, see '-U' below.
  -c: Cancel tile and copy holds on title based on catalogue keys from STDIN. When this switch is used, and the
      holds are cancelled, the HOLD-er's user ID and title are output to STDOUT in pipe-delimited fashion.
  -m: Move holds from one title to another. Accepts input on STDIN in the form of 'TCN_SOURCE|TCN_DESTINATION|'
@@ -85,6 +141,7 @@ example:
  $0 -x
  echo "a1004031|LSC2740719" | $0 -m
  cat catalog.keys | $0 -c
+ $0 -A
 Version: $VERSION
 EOF
     exit;
@@ -287,14 +344,34 @@ sub test_TCN_pairs( $ )
 	return 0;
 }
 
+# Selects INACTIVE but available holds then switches the Availability flag to 'N'.
+# param: <none>
+# return: count of records fixed.
+sub fix_inactive_available_holds()
+{
+	my $results = `selhold -aY -jINACTIVE 2>/dev/null`;
+	my $inactiveAvailableHoldKeys = create_tmp_file( "holdbot_", $results );
+	if ( $opt{'U'} )
+	{
+		`cat "$inactiveAvailableHoldKeys" | edithold -a'N'`;
+	}
+	$results = `cat "" | wc -l | "$PIPE" -tc0`;
+	return $results;
+}
+
 # Kicks off the setting of various switches.
 # param:  
 # return: 
 sub init
 {
-	my $opt_string = 'cmUsx';
+	my $opt_string = 'AcmUsx';
 	getopts( "$opt_string", \%opt ) or usage();
 	usage() if ( $opt{'x'} );
+	if ( $opt{'A'} )
+	{
+		printf STDERR "Fixed: %d INACTIVE but available holds.\n", fix_inactive_available_holds();
+		exit 0;
+	}
 }
 
 init();
