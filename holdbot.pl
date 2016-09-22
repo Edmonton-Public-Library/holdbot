@@ -24,6 +24,7 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.4.02 - Clean up variable declarations and trailing "'" on selhold selection. 
 #          0.4.01 - Check for availability of yesterday. 
 #          0.4.00 - Add fix to change INACTIVE holds to have available flag 'Y' to 'N'. 
 #          0.3.02 - Fixed bug that failed to lower case titles before output. 
@@ -38,7 +39,9 @@
 #          0.1_01 - Adding -m, change dates of holds back to original. 
 #          0.1 - Script framework and documentation set up. 
 #          0.0 - Dev. 
-# Dependencies: pipe.pl - To clean and trim extra fields at various locations.
+# Dependencies: 
+# cancelholds.pl 
+# pipe.pl        - To clean and trim extra fields at various locations.
 #
 ###################################################################################
 
@@ -54,19 +57,14 @@ use Getopt::Std;
 $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
 $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
-my $TEMP_DIR           = `getpathname tmp`;
-chomp $TEMP_DIR;
-my $TIME               = `date +%H%M%S`;
-chomp $TIME;
-my $DATE               = `date +%m/%d/%Y`;
-chomp $DATE;
-my $TODAY              = `date +%Y%m%d`;
-chomp $TODAY;
+chomp( my $TEMP_DIR    = `getpathname tmp` );
+chomp( my $TIME        = `date +%H%M%S` );
+chomp( my $DATE        = `date +%m/%d/%Y` );
+chomp( my $TODAY       = `date +%Y%m%d` );
 my @CLEAN_UP_FILE_LIST = (); # List of file names that will be deleted at the end of the script if ! '-t'.
-my $BINCUSTOM          = `getpathname bincustom`;
-chomp $BINCUSTOM;
+chomp( my $BINCUSTOM   = `getpathname bincustom` );
 my $PIPE               = "$BINCUSTOM/pipe.pl";
-my $VERSION            = qq{0.4.00};
+my $VERSION            = qq{0.4.02};
 
 # Removes all the temp files created during running of the script.
 # param:  List of all the file names to clean up.
@@ -85,10 +83,6 @@ sub clean_up
 			{
 				unlink $file;
 			}
-			else
-			{
-				printf STDERR "** Warning: file '%s' not found.\n", $file;
-			}
 		}
 	}
 }
@@ -102,7 +96,7 @@ sub create_tmp_file( $$ )
 	my $name    = shift;
 	my $results = shift;
 	my $sequence= sprintf "%02d", scalar @CLEAN_UP_FILE_LIST;
-	my $master_file = "$TEMP_DIR/$name.$sequence.$TIME";
+	my $master_file = "$TEMP_DIR/$name.$sequence.$DATE.$TIME";
 	# Return just the file name if there are no results to report.
 	return $master_file if ( ! $results );
 	open FH, ">$master_file" or die "*** error opening '$master_file', $!\n";
@@ -263,11 +257,11 @@ sub cancel_holds_on_title( $ )
 {
 	my $catKey  = shift;
 	# Output the title for the customer for email content.
-	my $title = `echo "$catKey" | selcatalog -iC -ot 2>/dev/null`; # V also
+	my $title = `echo "$catKey" | selcatalog -iC -ot 2>/dev/null`;
 	chomp $title;
 	# This should look like "[user bar code]|[title]|[search URL]", and be written in an output for mailerbot.
-
-	my $results = `echo "$catKey" | selhold -iC -j"ACTIVE" -oIUt 2>/dev/null | selitem -iI -oSB 2>/dev/null | seluser -iU -oBS 2>/dev/null'`;
+	my $results = `echo "$catKey" | selhold -iC -j"ACTIVE" -oIUt 2>/dev/null | selitem -iI -oSB 2>/dev/null | seluser -iU -oBS 2>/dev/null`;
+	create_tmp_file( "holdbot_cancel_holds_on_title_selection", $results );
 	# creates: '21221012345678|T|31221087033671  |' for the one hold on a many item-ed title, so many lines.
 	my @lines = split '\n', $results;
 	my $count = scalar @lines;
@@ -289,7 +283,10 @@ sub cancel_holds_on_title( $ )
 		if ( $opt{'s'} )
 		{
 			chomp $title;
-			my $search = qq{http://epl.bibliocommons.com/search?t=smart&q=}.`echo "$title" | pipe.pl -e'c0:lc'`;
+			# We need the title for the book not the rest of the string.
+			# Titles usually have a '/' or ';' in them, we take just the text before this, which is the title
+			# itself. Once we have done that we change the title to URL safe format.
+			my $search = `echo "$title" | $BINCUSTOM/opacsearchlink.pl` if ( -f "$BINCUSTOM/opacsearchlink.pl" );
 			# output as "[user bar code]|[title]|[search url]", and be written in an output for mailerbot.
 			printf "%s|%s|%s", $userId, $title, $search;
 		}
@@ -374,7 +371,7 @@ sub init
 	if ( $opt{'A'} )
 	{
 		printf STDERR "Fixed: %d INACTIVE but available holds.\n", fix_inactive_available_holds();
-		clean_up() if ( ! $opt{'t'} );
+		clean_up();
 		exit 0;
 	}
 }
@@ -407,4 +404,5 @@ while (<>)
 		cancel_holds_on_title( $key );
 	}
 }
+clean_up();
 # EOF
