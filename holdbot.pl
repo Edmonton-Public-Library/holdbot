@@ -59,7 +59,7 @@ $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
 ###############################################
 chomp( my $TEMP_DIR    = `getpathname tmp` );
 chomp( my $TIME        = `date +%H%M%S` );
-chomp( my $DATE        = `date +%m/%d/%Y` );
+chomp( my $DATE        = `date +%Y%m%d` );
 chomp( my $TODAY       = `date +%Y%m%d` );
 my @CLEAN_UP_FILE_LIST = (); # List of file names that will be deleted at the end of the script if ! '-t'.
 chomp( my $BINCUSTOM   = `getpathname bincustom` );
@@ -259,12 +259,20 @@ sub cancel_holds_on_title( $ )
 	# Output the title for the customer for email content.
 	my $title = `echo "$catKey" | selcatalog -iC -ot 2>/dev/null`;
 	chomp $title;
+	my $search = '';
+	if ( $opt{'s'} )
+	{
+		# We need the title for the book not the rest of the string.
+		# Titles usually have a '/' or ';' in them, we take just the text before this, which is the title
+		# itself. Once we have done that we change the title to URL safe format.
+		$search = `echo "$title" | $BINCUSTOM/opacsearchlink.pl` if ( -f "$BINCUSTOM/opacsearchlink.pl" );
+	}
 	# This should look like "[user bar code]|[title]|[search URL]", and be written in an output for mailerbot.
 	my $results = `echo "$catKey" | selhold -iC -j"ACTIVE" -oIUt 2>/dev/null | selitem -iI -oSB 2>/dev/null | seluser -iU -oBS 2>/dev/null`;
 	create_tmp_file( "holdbot_cancel_holds_on_title_selection", $results );
 	# creates: '21221012345678|T|31221087033671  |' for the one hold on a many item-ed title, so many lines.
 	my @lines = split '\n', $results;
-	my $count = scalar @lines;
+	my $count = scalar( @lines );
 	if ( ! $count )
 	{
 		printf STDERR "== no holds on title %s ($catKey)\n", $title;
@@ -278,16 +286,8 @@ sub cancel_holds_on_title( $ )
 		my ( $userId, $holdType, $itemId ) = split '\|', $line;
 		next if ( ! defined $userId or ! defined $holdType or ! defined $itemId );
 		next if ( $userId eq '' or $holdType eq ''  or $itemId  eq '' );
-		# Output the user id so we can email, and the item id for email content.
-		my $title  = `echo "$catKey" | selcatalog -iC -ot 2>/dev/null`;
 		if ( $opt{'s'} )
 		{
-			chomp $title;
-			# We need the title for the book not the rest of the string.
-			# Titles usually have a '/' or ';' in them, we take just the text before this, which is the title
-			# itself. Once we have done that we change the title to URL safe format.
-			my $search = `echo "$title" | $BINCUSTOM/opacsearchlink.pl` if ( -f "$BINCUSTOM/opacsearchlink.pl" );
-			# output as "[user bar code]|[title]|[search url]", and be written in an output for mailerbot.
 			printf "%s|%s|%s", $userId, $title, $search;
 		}
 		else
