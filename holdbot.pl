@@ -24,6 +24,7 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.4.03 - Ensured new line on output during cancel holds. 
 #          0.4.02 - Clean up variable declarations and trailing "'" on selhold selection. 
 #          0.4.01 - Check for availability of yesterday. 
 #          0.4.00 - Add fix to change INACTIVE holds to have available flag 'Y' to 'N'. 
@@ -64,7 +65,7 @@ chomp( my $TODAY       = `date +%Y%m%d` );
 my @CLEAN_UP_FILE_LIST = (); # List of file names that will be deleted at the end of the script if ! '-t'.
 chomp( my $BINCUSTOM   = `getpathname bincustom` );
 my $PIPE               = "$BINCUSTOM/pipe.pl";
-my $VERSION            = qq{0.4.02};
+my $VERSION            = qq{0.4.03};
 
 # Removes all the temp files created during running of the script.
 # param:  List of all the file names to clean up.
@@ -288,12 +289,12 @@ sub cancel_holds_on_title( $ )
 		next if ( $userId eq '' or $holdType eq ''  or $itemId  eq '' );
 		if ( $opt{'s'} )
 		{
-			printf "%s|%s|%s", $userId, $title, $search;
+			printf "%s|%s|%s\n", $userId, $title, $search;
 		}
 		else
 		{
 			# This should look like "[user bar code]|[title]|", and be written in an output for mailerbot.
-			printf "%s|%s", $userId, $title;
+			printf "%s|%s\n", $userId, $title;
 		}
 		if ( $opt{'U'} )
 		{
