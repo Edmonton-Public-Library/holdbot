@@ -24,6 +24,8 @@
 # Author:  Andrew Nisbet, Edmonton Public Library
 # Created: Wed Jun 10 11:00:07 MDT 2015
 # Rev: 
+#          0.4.04 - Fix trailing pipes appearing after user id causing ZAMA errors; unknown user
+#                   during move of holds. 
 #          0.4.03 - Ensured new line on output during cancel holds. 
 #          0.4.02 - Clean up variable declarations and trailing "'" on selhold selection. 
 #          0.4.01 - Check for availability of yesterday. 
@@ -65,7 +67,7 @@ chomp( my $TODAY       = `date +%Y%m%d` );
 my @CLEAN_UP_FILE_LIST = (); # List of file names that will be deleted at the end of the script if ! '-t'.
 chomp( my $BINCUSTOM   = `getpathname bincustom` );
 my $PIPE               = "$BINCUSTOM/pipe.pl";
-my $VERSION            = qq{0.4.03};
+my $VERSION            = qq{0.4.04};
 
 # Removes all the temp files created during running of the script.
 # param:  List of all the file names to clean up.
@@ -197,9 +199,9 @@ sub move_holds( $ )
 	# To do that, lets get the item id and user id
 	`cat tmp_holds_ordered.lst | selhold -iK -oI | selitem -iI -oB | pipe.pl -t"c0" >item_ids_ordered.lst`;
 	# find all the user ids in order.
-	`cat tmp_holds_ordered.lst | pipe.pl -o"c3" | seluser -iU -oB | pipe.pl -t"c0" >user_ids_ordered.lst`;
+	`cat tmp_holds_ordered.lst | pipe.pl -o"c3" | seluser -iU -oB | pipe.pl -t"c0" -oc0 >user_ids_ordered.lst`;
 	# Find an ID of an item for the new hold.
-	my $new_item = `echo "$dst" | selcatalog -iF -oC | selitem -iC -oB | pipe.pl -L"1" -t"c0"`;
+	my $new_item = `echo "$dst" | selcatalog -iF -oC | selitem -iC -oB | pipe.pl -L"1" -t"c0" -oc0`;
 	chomp $new_item;
 	if ( ! defined $new_item or $new_item eq '' )
 	{
