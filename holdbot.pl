@@ -66,8 +66,8 @@ use Getopt::Std;
 # without assuming any environment settings and we need to use sirsi's.
 ###############################################
 # *** Edit these to suit your environment *** #
-# $ENV{'PATH'}  = qq{:/s/sirsi/Unicorn/Bincustom:/s/sirsi/Unicorn/Bin:/usr/bin:/usr/sbin};
-# $ENV{'UPATH'} = qq{/s/sirsi/Unicorn/Config/upath};
+# $ENV{'PATH'}  = qq{:/software/EDPL/Unicorn/Bincustom:/software/EDPL/Unicorn/Bin:/usr/bin:/usr/sbin};
+# $ENV{'UPATH'} = qq{/software/EDPL/Unicorn/Config/upath};
 ###############################################
 chomp( my $TEMP_DIR    = `getpathname tmp` );
 chomp( my $TIME        = `date +%H%M%S` );
