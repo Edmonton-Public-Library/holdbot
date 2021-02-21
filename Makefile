@@ -25,7 +25,7 @@
 #      0.0 - Dev. 
 ####################################################
 # Change comment below for appropriate server.
-PRODUCTION_SERVER=eplapp.library.ualberta.ca
+PRODUCTION_SERVER=edpl.sirsidynix.net
 TEST_SERVER=edpl-t.library.ualberta.ca
 USER=sirsi
 REMOTE=~/Unicorn/Bincustom/
